@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>JudgeLLM — Three models answer. One verdict.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Spectral:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #eef1f4;
+    --panel: #ffffff;
+    --ink: #1b2a41;
+    --ink-soft: #5b6b80;
+    --line: #d7dde4;
+    --brass: #a07c1f;
+    --brass-soft: #f4ecd8;
+    --user: #1b2a41;
+    --mono: "JetBrains Mono", monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    align-items: baseline;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-family: "Spectral", serif;
+    font-weight: 700;
+    font-size: 1.4rem;
+    letter-spacing: 0.01em;
+  }
+  header h1 .gavel { color: var(--brass); }
+  header p {
+    font-size: 0.8rem;
+    color: var(--ink-soft);
+    font-family: var(--mono);
+  }
+
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 16px 16px;
+  }
+  .inner { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+
+  .msg { display: flex; flex-direction: column; gap: 6px; max-width: 92%; }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.judge { align-self: flex-start; }
+
+  .who {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+  }
+  .msg.judge .who { color: var(--brass); }
+
+  .bubble {
+    padding: 12px 16px;
+    border-radius: 12px;
+    line-height: 1.55;
+    font-size: 0.95rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.user .bubble {
+    background: var(--user);
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .msg.judge .bubble {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--brass);
+    border-bottom-left-radius: 4px;
+  }
+  .msg.error .bubble {
+    background: #fdf0f0;
+    border: 1px solid #e6c3c3;
+    color: #8a2a2a;
+  }
+
+  /* Expandable panel with the three raw model answers */
+  details.evidence {
+    background: var(--brass-soft);
+    border: 1px solid #e3d6b2;
+    border-radius: 10px;
+    font-size: 0.85rem;
+  }
+  details.evidence summary {
+    cursor: pointer;
+    padding: 8px 14px;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--brass);
+    user-select: none;
+  }
+  details.evidence[open] summary { border-bottom: 1px solid #e3d6b2; }
+  .evidence-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+  .evidence-body h4 {
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin-bottom: 4px;
+  }
+  .evidence-body p { line-height: 1.5; white-space: pre-wrap; }
+
+  /* Typing / deliberating indicator */
+  .deliberating {
+    align-self: flex-start;
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    padding: 10px 14px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .deliberating .dots::after {
+    content: "";
+    animation: dots 1.4s steps(4, end) infinite;
+  }
+  @keyframes dots {
+    0% { content: ""; }
+    25% { content: "."; }
+    50% { content: ".."; }
+    75% { content: "..."; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .deliberating .dots::after { content: "..."; animation: none; }
+  }
+
+  .empty {
+    text-align: center;
+    color: var(--ink-soft);
+    padding: 48px 20px;
+  }
+  .empty .seal {
+    font-family: "Spectral", serif;
+    font-size: 2.6rem;
+    color: var(--brass);
+    margin-bottom: 8px;
+  }
+  .empty p { font-size: 0.9rem; max-width: 420px; margin: 0 auto; line-height: 1.6; }
+
+  form#composer {
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    padding: 14px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+  .composer-inner {
+    max-width: 760px;
+    margin: 0 auto;
+    display: flex;
+    gap: 10px;
+  }
+  #question {
+    flex: 1;
+    resize: none;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 11px 14px;
+    font: inherit;
+    font-size: 0.95rem;
+    background: var(--bg);
+    color: var(--ink);
+    max-height: 140px;
+  }
+  #question:focus { outline: 2px solid var(--brass); outline-offset: 1px; border-color: transparent; }
+  #send {
+    border: none;
+    background: var(--ink);
+    color: #fff;
+    font: inherit;
+    font-weight: 600;
+    font-size: 0.9rem;
+    padding: 0 20px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  #send:hover:not(:disabled) { background: #24374f; }
+  #send:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+  #send:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="gavel">⚖</span> JudgeLLM</h1>
+  <p>claude · gpt-4o-mini · gemini — one verdict</p>
+</header>
+
+<main id="chat" aria-live="polite">
+  <div class="inner" id="messages">
+    <div class="empty" id="emptyState">
+      <div class="seal">⚖</div>
+      <p>Ask a software or computer science question. Three models answer independently; a judge model reviews them and delivers the best response.</p>
+    </div>
+  </div>
+</main>
+
+<form id="composer">
+  <div class="composer-inner">
+    <textarea id="question" rows="1" placeholder="Ask a software question…" aria-label="Your question"></textarea>
+    <button id="send" type="submit">Ask</button>
+  </div>
+</form>
+
+<script>
+  const chat = document.getElementById("chat");
+  const messagesEl = document.getElementById("messages");
+  const form = document.getElementById("composer");
+  const questionEl = document.getElementById("question");
+  const sendBtn = document.getElementById("send");
+  const emptyState = document.getElementById("emptyState");
+
+  // Conversation history lives in the browser and is sent with each request,
+  // because serverless functions keep no memory between calls.
+  const history = [];
+
+  function scrollToBottom() {
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  function addMessage(role, text) {
+    const wrap = document.createElement("div");
+    wrap.className = "msg " + role;
+
+    const who = document.createElement("div");
+    who.className = "who";
+    who.textContent = role === "user" ? "You" : role === "judge" ? "Judge" : "Error";
+
+    const bubble = document.createElement("div");
+    bubble.className = "bubble";
+    bubble.textContent = text;
+
+    wrap.appendChild(who);
+    wrap.appendChild(bubble);
+    messagesEl.appendChild(wrap);
+    scrollToBottom();
+    return wrap;
+  }
+
+  function addEvidence(parent, responses) {
+    const details = document.createElement("details");
+    details.className = "evidence";
+
+    const summary = document.createElement("summary");
+    summary.textContent = "View the three model responses";
+    details.appendChild(summary);
+
+    const body = document.createElement("div");
+    body.className = "evidence-body";
+
+    const entries = [
+      ["Claude", responses.claude],
+      ["GPT-4o mini", responses.openai],
+      ["Gemini", responses.gemini],
+    ];
+    for (const [name, text] of entries) {
+      const section = document.createElement("div");
+      const h = document.createElement("h4");
+      h.textContent = name;
+      const p = document.createElement("p");
+      p.textContent = text || "(no response)";
+      section.appendChild(h);
+      section.appendChild(p);
+      body.appendChild(section);
+    }
+    details.appendChild(body);
+    parent.appendChild(details);
+    scrollToBottom();
+  }
+
+  function showDeliberating() {
+    const el = document.createElement("div");
+    el.className = "deliberating";
+    el.innerHTML = 'The court is deliberating<span class="dots"></span>';
+    messagesEl.appendChild(el);
+    scrollToBottom();
+    return el;
+  }
+
+  async function ask(question) {
+    if (emptyState) emptyState.remove();
+    addMessage("user", question);
+    const loader = showDeliberating();
+    sendBtn.disabled = true;
+
+    try {
+      const res = await fetch("/api/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question, history }),
+      });
+
+      const data = await res.json();
+      loader.remove();
+
+      if (!res.ok) {
+        addMessage("error", data.error || "Request failed (" + res.status + ")");
+        return;
+      }
+
+      const judgeMsg = addMessage("judge", data.answer);
+      if (data.responses) addEvidence(judgeMsg, data.responses);
+
+      history.push({ role: "user", content: question });
+      history.push({ role: "assistant", content: data.answer });
+    } catch (e) {
+      loader.remove();
+      addMessage("error", "Network error: " + e.message);
+    } finally {
+      sendBtn.disabled = false;
+      questionEl.focus();
+    }
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const q = questionEl.value.trim();
+    if (!q || sendBtn.disabled) return;
+    questionEl.value = "";
+    questionEl.style.height = "auto";
+    ask(q);
+  });
+
+  // Enter sends, Shift+Enter makes a new line
+  questionEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  // Auto-grow the textarea
+  questionEl.addEventListener("input", () => {
+    questionEl.style.height = "auto";
+    questionEl.style.height = Math.min(questionEl.scrollHeight, 140) + "px";
+  });
+
+  questionEl.focus();
+</script>
+</body>
+</html>
