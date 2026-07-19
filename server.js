@@ -1,9 +1,15 @@
+import express from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { OpenAI } from "openai";
 import { GoogleGenAI } from "@google/genai";
 import "dotenv/config";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const MAX_TOKENS = 200;
+const PORT = process.env.PORT || 3000;
 
 const SYSTEM_PROMPT = `You are a Senior Software Developer.
 You can only answer questions from the field of Software and Computer Science.
@@ -18,26 +24,23 @@ Your answer will be limited to the responses provided by the LLMs.
 Do not add any new information beyond what is provided in the LLM responses.
 Your response should start with Judge LLM Response Start: and end with Judge LLM Response Ends`;
 
-// Clients are created once per warm function instance and reused
 const claudeClient = new Anthropic();
 const openaiClient = new OpenAI();
 const geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Allow up to 60s — three LLM calls + a reasoning-model judge can be slow
-export const config = { maxDuration: 60 };
+const app = express();
+app.use(express.json({ limit: "100kb" }));
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed. Use POST." });
-  }
+// Serve the chat frontend (index.html) from the project root
+app.use(express.static(__dirname));
 
+app.post("/api/ask", async (req, res) => {
   const { question, history = [] } = req.body ?? {};
 
   if (!question || typeof question !== "string" || !question.trim()) {
     return res.status(400).json({ error: "Missing 'question' in request body." });
   }
 
-  // Basic sanity limits so a bad client can't send huge payloads
   const cleanHistory = history
     .filter(
       (m) =>
@@ -45,7 +48,7 @@ export default async function handler(req, res) {
         (m.role === "user" || m.role === "assistant") &&
         typeof m.content === "string"
     )
-    .slice(-10); // keep only the last 10 turns
+    .slice(-10);
 
   const messages = [...cleanHistory, { role: "user", content: question.trim() }];
 
@@ -102,10 +105,8 @@ LLM3 Response End.`;
       instructions: combinedSystemPrompt,
     });
 
-    const judgeAnswer = judgeResult.output_text;
-
-    return res.status(200).json({
-      answer: judgeAnswer,
+    res.json({
+      answer: judgeResult.output_text,
       responses: {
         claude: claudeResponse,
         openai: openaiResponse,
@@ -114,6 +115,10 @@ LLM3 Response End.`;
     });
   } catch (e) {
     console.error("judgellm error:", e);
-    return res.status(500).json({ error: e.message || "Something went wrong." });
+    res.status(500).json({ error: e.message || "Something went wrong." });
   }
-}
+});
+
+app.listen(PORT, () => {
+  console.log(`JudgeLLM running at http://localhost:${PORT}`);
+});
