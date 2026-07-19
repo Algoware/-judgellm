@@ -5,7 +5,7 @@
   "main": "judgellm.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node judgellm.js"
+    "start": "node server.js"
   },
   "repository": {
     "type": "git",
@@ -30,6 +30,7 @@
     "@anthropic-ai/sdk": "^0.112.3",
     "@google/genai": "^2.12.0",
     "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "openai": "^6.48.0"
   }
 }
