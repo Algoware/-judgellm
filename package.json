@@ -1,0 +1,35 @@
+{
+  "name": "judgellm",
+  "version": "1.0.0",
+  "description": "this application is llm judge, user inputs a question, and three different llms repond and the fourth llm takes the three responses and analyses the response and produces the best result.",
+  "main": "judgellm.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node judgellm.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yashgandhi/judgellm.git"
+  },
+  "keywords": [
+    "llm",
+    "judge",
+    "anthropic",
+    "openai",
+    "gemini",
+    "ai"
+  ],
+  "author": "Yash Gandhi",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yashgandhi/judgellm/issues"
+  },
+  "homepage": "https://github.com/yashgandhi/judgellm#readme",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.112.3",
+    "@google/genai": "^2.12.0",
+    "dotenv": "^17.4.2",
+    "openai": "^6.48.0"
+  }
+}
